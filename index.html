@@ -33,6 +33,7 @@
 
     <nav class="tabs" aria-label="Navegação do app">
       <button class="tab active" data-view="hoje">Hoje</button>
+      <button class="tab" data-view="dashboard">Dashboard</button>
       <button class="tab" data-view="plano">Plano</button>
       <button class="tab" data-view="modalidades">Treinos</button>
       <button class="tab" data-view="controle">Controle</button>
@@ -56,6 +57,26 @@
       <div class="card warning">
         <h3>Regra do dia</h3>
         <p>Se a dor no joelho passar de 3/10, alterar a passada ou piorar no dia seguinte, troque corrida por bike leve ou natação técnica.</p>
+      </div>
+    </section>
+
+    <section id="view-dashboard" class="view">
+      <div class="card">
+        <div class="section-head">
+          <div>
+            <h2>Dashboard de desenvolvimento</h2>
+            <p class="muted">Mostra sua evolução com base nos checklists e registros salvos no celular.</p>
+          </div>
+        </div>
+      </div>
+      <div id="dashboardMetrics" class="dashboard-grid"></div>
+      <div class="card">
+        <h2>Leitura da semana</h2>
+        <div id="dashboardInsight" class="insight"></div>
+      </div>
+      <div class="card">
+        <h2>Últimos registros</h2>
+        <div id="dashboardHistory" class="history compact"></div>
       </div>
     </section>
 
@@ -85,10 +106,29 @@
         <h2>Registro rápido</h2>
         <p class="muted">Salvo apenas neste celular/navegador.</p>
         <div class="form-grid">
-          <label>Dor joelho 0-10<input id="kneePain" type="number" min="0" max="10" placeholder="0" /></label>
-          <label>RPE médio 1-10<input id="rpe" type="number" min="1" max="10" placeholder="4" /></label>
-          <label>Sono médio<input id="sleep" type="text" placeholder="7h" /></label>
-          <label>Observações<textarea id="notes" rows="4" placeholder="Como foi a semana?"></textarea></label>
+          <label>Dor joelho 0-10
+            <input id="kneePain" type="number" min="0" max="10" placeholder="0" />
+            <small>0 = sem dor; 3 = atenção; 4 ou mais = reduzir impacto.</small>
+          </label>
+          <label>RPE médio 1-10
+            <input id="rpe" type="number" min="1" max="10" placeholder="4" />
+            <small>Média de esforço da semana: 1-2 muito leve, 3-4 leve, 5-6 moderado, 7-8 forte, 9-10 máximo.</small>
+          </label>
+          <label>Sono médio
+            <input id="sleep" type="text" placeholder="7h" />
+            <small>Use a média aproximada por noite. Exemplo: 6h30 ou 7h.</small>
+          </label>
+          <label>Observações
+            <textarea id="notes" rows="4" placeholder="Como foi a semana?"></textarea>
+            <small>Registre dor, cansaço, motivação, treino perdido ou evolução percebida.</small>
+          </label>
+        </div>
+        <div class="rpe-guide">
+          <h3>Como medir o RPE médio</h3>
+          <p>Ao final da semana, pense: “qual foi a sensação geral dos treinos?” Não é o pico do treino mais difícil; é a média da semana.</p>
+          <div class="rpe-scale">
+            <span>1-2 Recuperativo</span><span>3-4 Leve</span><span>5-6 Moderado</span><span>7-8 Forte</span><span>9-10 Máximo</span>
+          </div>
         </div>
         <button id="saveControl" class="primary">Salvar controle da semana</button>
         <div id="controlMsg" class="save-msg"></div>
