@@ -25,16 +25,28 @@ function initHeader(){
   const days = Math.max(0, Math.ceil((raceDate - today)/(1000*60*60*24)));
   document.getElementById('daysToRace').textContent = days;
 }
-function taskDay(w, index){
-  const local = String(w['Local preferencial'] || '');
-  const isBeachWeekend = /Penha|Navegantes/i.test(local);
-  const beachDays = ['Sexta-feira','Sábado','Domingo','Sábado ou domingo','Livre'];
-  const baseDays = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sábado'];
-  return (isBeachWeekend ? beachDays : baseDays)[index] || `Treino ${index+1}`;
+function taskDay(w, index, title='', weekdayIndex=0){
+  const text = String(title || '').toLowerCase();
+  const local = String(w['Local preferencial'] || '').toLowerCase();
+  const weekdayDays = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira'];
+
+  if(/prova|race/.test(text)) return 'Domingo';
+  if(/speed|bike|bicicleta|ciclismo/.test(text)) return 'Sábado';
+  if(/brick|transição|transicao/.test(text)) return 'Domingo';
+  if(/natação praia|natacao praia|praia penha/.test(text) && /penha|navegantes/.test(local)) return 'Sexta-feira';
+
+  return weekdayDays[weekdayIndex] || `Treino ${index+1}`;
 }
 function weekTasks(w){
+  let weekdayIndex = 0;
   return [1,2,3,4,5]
-    .map((n,idx)=>w[`Treino ${n}`] ? ({id:`w${w['Sem']}-t${idx+1}`, day: taskDay(w, idx), title:w[`Treino ${n}`]}) : null)
+    .map((n,idx)=>{
+      const title = w[`Treino ${n}`];
+      if(!title) return null;
+      const day = taskDay(w, idx, title, weekdayIndex);
+      if(!/Sábado|Domingo/.test(day)) weekdayIndex += 1;
+      return {id:`w${w['Sem']}-t${idx+1}`, day, title};
+    })
     .filter(Boolean);
 }
 function renderChecklist(){
