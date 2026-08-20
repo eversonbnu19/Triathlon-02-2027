@@ -3,6 +3,11 @@ const raceDate = new Date('2027-02-14T07:00:00-03:00');
 const today = new Date();
 const weekSelect = document.getElementById('weekSelect');
 const stateKey = 'tri_penha_app_v2';
+const SUPABASE_URL = 'https://fnwzkcrxtsprphsaxsfi.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZud3prY3J4dHNwcnBoc2F4c2ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMTQ0NzMsImV4cCI6MjEwMjc5MDQ3M30.0Mo8rrmzBLfLJ8zU8f9lteGeYQ-WpLgevoAwMbsabtg';
+const CLOUD_DEVICE_ID = 'everson-triathlon-penha-2027';
+let supabaseClient = null;
+let cloudReady = false;
 let state = JSON.parse(localStorage.getItem(stateKey) || '{}');
 if(!state.done) state.done = {};
 if(!state.control) state.control = {};
@@ -10,6 +15,22 @@ if(!state.gymDone) state.gymDone = {};
 
 function save(){ localStorage.setItem(stateKey, JSON.stringify(state)); }
 function fmtDate(s){ const d = new Date(s+'T12:00:00'); return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); }
+function setCloudStatus(message, type='neutral'){
+  const el = document.getElementById('cloudStatus');
+  if(!el) return;
+  el.textContent = message;
+  el.className = `cloud-status ${type}`;
+}
+function initCloud(){
+  if(window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY){
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    cloudReady = true;
+    setCloudStatus('Nuvem: Supabase conectado. Salvamento local + online.', 'ok');
+    loadCloudHistory();
+  }else{
+    setCloudStatus('Nuvem: indisponível. Salvando apenas neste celular.', 'warn');
+  }
+}
 function currentWeekIndex(){
   let idx = 0;
   data.plano25.forEach((w,i)=>{ if(new Date(w['Início']+'T00:00:00') <= today) idx = i; });
@@ -193,6 +214,71 @@ function renderDashboard(){
     hist.innerHTML = entries.length ? entries.map(([week,rec])=>`<div class="history-item"><strong>Semana ${week}</strong><div class="muted">Joelho ${rec.kneePain||'-'} • RPE ${rec.rpe||'-'} • Sono ${rec.sleep||'-'}</div><p>${rec.notes||''}</p></div>`).join('') : '<p class="muted">Ainda não há registros. Preencha a aba Controle no fim da semana.</p>';
   }
 }
+async function loadCloudHistory(){
+  if(!cloudReady || !supabaseClient) return;
+  try{
+    const { data: rows, error } = await supabaseClient
+      .from('registros_treino')
+      .select('*')
+      .eq('device_id', CLOUD_DEVICE_ID)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if(error) throw error;
+    if(rows && rows.length){
+      rows.reverse().forEach(row=>{
+        state.control[row.semana] = {
+          kneePain: row.dor_joelho ?? '',
+          rpe: row.rpe_medio ?? '',
+          sleep: row.sono_medio ?? '',
+          notes: row.observacoes ?? '',
+          date: row.created_at,
+          cloud: true
+        };
+        if(row.dados_json && typeof row.dados_json === 'object'){
+          if(row.dados_json.done) state.done = {...state.done, ...row.dados_json.done};
+          if(row.dados_json.gymDone) state.gymDone = {...state.gymDone, ...row.dados_json.gymDone};
+        }
+      });
+      save(); renderAll(); renderModalidades();
+      setCloudStatus(`Nuvem: ${rows.length} registro(s) carregado(s) do Supabase.`, 'ok');
+    }else{
+      setCloudStatus('Nuvem: conectado, sem registros antigos ainda.', 'ok');
+    }
+  }catch(err){
+    setCloudStatus('Nuvem: não foi possível carregar. Verifique se a tabela registros_treino existe e se as policies estão ativas.', 'warn');
+  }
+}
+async function saveControlToCloud(week, rec){
+  if(!cloudReady || !supabaseClient){
+    setCloudStatus('Nuvem: indisponível. Registro salvo apenas no celular.', 'warn');
+    return false;
+  }
+  const tasks = weekTasks(data.plano25[selectedWeek]);
+  const doneCount = tasks.filter(t=>state.done[t.id]).length;
+  const payload = {
+    device_id: CLOUD_DEVICE_ID,
+    semana: Number(week),
+    dor_joelho: rec.kneePain === '' ? null : Number(rec.kneePain),
+    rpe_medio: rec.rpe === '' ? null : Number(rec.rpe),
+    sono_medio: rec.sleep || null,
+    observacoes: rec.notes || null,
+    treinos_concluidos: doneCount,
+    total_treinos: tasks.length,
+    dados_json: {
+      done: state.done,
+      gymDone: state.gymDone,
+      selectedWeek,
+      savedAt: new Date().toISOString()
+    }
+  };
+  const { error } = await supabaseClient.from('registros_treino').insert(payload);
+  if(error){
+    setCloudStatus('Nuvem: erro ao salvar. Confirme a tabela e as policies no Supabase.', 'danger');
+    return false;
+  }
+  setCloudStatus('Nuvem: registro salvo com sucesso no Supabase.', 'ok');
+  return true;
+}
 function renderAll(){ initHeader(); renderChecklist(); renderWeekDetail(); renderTimeline(); renderControl(); renderDashboard(); }
 
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
@@ -201,12 +287,19 @@ document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>
   renderDashboard();
 }));
 document.getElementById('resetWeek').addEventListener('click',()=>{weekTasks(data.plano25[selectedWeek]).forEach(t=>delete state.done[t.id]); save(); renderChecklist(); renderDashboard();});
-document.getElementById('saveControl').addEventListener('click',()=>{
-  const w=data.plano25[selectedWeek]; state.control[w['Sem']]={kneePain:kneePain.value,rpe:rpe.value,sleep:sleep.value,notes:notes.value,date:new Date().toISOString()}; save();
-  document.getElementById('controlMsg').textContent='Controle salvo.'; renderHistory(); renderDashboard();
+document.getElementById('saveControl').addEventListener('click',async()=>{
+  const w=data.plano25[selectedWeek];
+  const rec={kneePain:kneePain.value,rpe:rpe.value,sleep:sleep.value,notes:notes.value,date:new Date().toISOString()};
+  state.control[w['Sem']]=rec;
+  save();
+  document.getElementById('controlMsg').textContent='Controle salvo no celular. Enviando para nuvem...';
+  renderHistory(); renderDashboard();
+  const ok = await saveControlToCloud(w['Sem'], rec);
+  document.getElementById('controlMsg').textContent = ok ? 'Controle salvo no celular e no Supabase.' : 'Controle salvo no celular. A nuvem não confirmou o envio.';
+  renderHistory(); renderDashboard();
 });
 let deferredPrompt; const installBtn=document.getElementById('installBtn');
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.classList.remove('hidden');});
 installBtn.addEventListener('click',async()=>{if(deferredPrompt){deferredPrompt.prompt();deferredPrompt=null;installBtn.classList.add('hidden');}});
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./service-worker.js').catch(()=>{});}
-initWeekSelect(); renderModalidades(); renderKneeRules(); renderAll();
+initWeekSelect(); renderModalidades(); renderKneeRules(); renderAll(); initCloud();
