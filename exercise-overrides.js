@@ -13,11 +13,11 @@
     },
     {
       "Treino":"A - Pernas e joelho",
-      "Exercício":"Agachamento goblet no banco/caixa",
+      "Exercício":"Agachamento livre",
       "Séries x reps":"4 x 8-10",
       "Intensidade":"RPE 6-7",
-      "Ponto técnico":"Sentar e levantar com controle; joelho alinhado, tronco firme e amplitude sem dor. <br><a class='exercise-link' target='_blank' rel='noopener' href='https://fitwill.app/pt-br/exercise/3692/dumbbell-goblet-box-squat/'>Ver referencia</a>",
-      "Substituição se joelho reclamar":"Reduzir amplitude, elevar caixa ou trocar por ponte de gluteo"
+      "Ponto técnico":"Agachar com controle, pés firmes, tronco estável e joelhos alinhados. Use amplitude confortável e sem dor. <br><a class='exercise-link' target='_blank' rel='noopener' href='https://www.youtube.com/results?search_query=agachamento+livre+execucao+correta'>Buscar video</a>",
+      "Substituição se joelho reclamar":"Reduzir amplitude, usar apoio/TRX ou trocar por ponte de glúteo"
     },
     {
       "Treino":"A - Pernas e joelho",
@@ -29,11 +29,11 @@
     },
     {
       "Treino":"A - Pernas e joelho",
-      "Exercício":"Terra romeno com halteres",
-      "Séries x reps":"4 x 8-10",
+      "Exercício":"Pull-through no cabo",
+      "Séries x reps":"4 x 10-12",
       "Intensidade":"RPE 6-7",
-      "Ponto técnico":"Quadril vai para tras, coluna neutra, halteres perto das pernas. <br><a class='exercise-link' target='_blank' rel='noopener' href='https://pt.skimble.com/exercises/94094-levantamento-terra-romeno-com-halteres-como-fazer-exercicio'>Ver referencia</a>",
-      "Substituição se joelho reclamar":"Pull-through no cabo ou ponte de gluteo"
+      "Ponto técnico":"Empurrar o quadril para trás, manter coluna neutra e voltar contraindo glúteos. Menos exigente para lombar que o terra romeno. <br><a class='exercise-link' target='_blank' rel='noopener' href='https://www.youtube.com/results?search_query=pull+through+no+cabo+execucao+correta'>Buscar video</a>",
+      "Substituição se joelho reclamar":"Ponte de glúteo com halter ou hip thrust leve"
     },
     {
       "Treino":"A - Pernas e joelho",
@@ -101,11 +101,11 @@
     },
     {
       "Treino":"C - Manutencao e core",
-      "Exercício":"Agachamento goblet leve ou split squat curto",
+      "Exercício":"Agachamento livre leve ou split squat curto",
       "Séries x reps":"3 x 8-10",
       "Intensidade":"RPE 5-6",
-      "Ponto técnico":"Treino tecnico, sem buscar carga maxima; joelho alinhado e amplitude confortavel. <br><a class='exercise-link' target='_blank' rel='noopener' href='https://www.youtube.com/results?search_query=split+squat+curto+execucao+joelho'>Buscar video</a>",
-      "Substituição se joelho reclamar":"Agachamento no banco ou ponte de gluteo"
+      "Ponto técnico":"Treino técnico, sem buscar carga máxima; joelho alinhado e amplitude confortável. <br><a class='exercise-link' target='_blank' rel='noopener' href='https://www.youtube.com/results?search_query=split+squat+curto+execucao+joelho'>Buscar video</a>",
+      "Substituição se joelho reclamar":"Agachamento com apoio ou ponte de glúteo"
     },
     {
       "Treino":"C - Manutencao e core",
