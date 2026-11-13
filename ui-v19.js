@@ -1,4 +1,4 @@
-// v19 - Limpa campos do treino atual sem apagar o peso anterior.
+// v19 (ajustado na v23: fila de envio offline) - Limpa campos do treino atual sem apagar o peso anterior.
 // Carrega historico do Supabase e preserva a referencia do ultimo treino por exercicio.
 (function(){
   if(!window.TRAINING_DATA || !window.TRAINING_DATA.academia) return;
@@ -47,13 +47,31 @@
     return '<strong>'+peso+'</strong><small>'+series+reps+'</small>';
   }
 
+  // v23: linhas antigas que ficaram so no celular (a nuvem falhou e nada reenviava) entram na fila.
+  function queueLegacyLocalRows(){
+    if(!window.TRI_OUTBOX) return;
+    var legacy=[];
+    Object.keys(state.exerciseHistory).forEach(function(key){
+      (state.exerciseHistory[key]||[]).forEach(function(r){
+        if(r && r.local===true && !r.queued && !r.id){
+          var c=Object.assign({},r); delete c.local; delete c.queued;
+          legacy.push(c); r.queued=true;
+        }
+      });
+    });
+    if(legacy.length){ window.TRI_OUTBOX.enqueue(TABLE,legacy,'Academia (registros antigos)'); save(); }
+  }
+
   async function loadHistory(){
+    queueLegacyLocalRows();
     if(!cloudReady || !supabaseClient) return;
     try{
       var res = await supabaseClient.from(TABLE).select('*').eq('device_id',CLOUD_DEVICE_ID).order('created_at',{ascending:false}).limit(500);
       if(res.error) throw res.error;
       var grouped = {};
-      (res.data || []).forEach(function(row){
+      // Registros ainda na fila de envio continuam valendo como "peso anterior".
+      var pending = window.TRI_OUTBOX ? window.TRI_OUTBOX.pendingRows(TABLE).map(function(r){return Object.assign({local:true,queued:true},r);}) : [];
+      (res.data || []).concat(pending).forEach(function(row){
         var key=row.exercicio_key || normalize(row.exercicio||'');
         if(!grouped[key]) grouped[key]=[];
         grouped[key].push(row);
@@ -151,27 +169,30 @@
     var dataRows=rows(letter).map(function(r){return payload(r,letter);}).filter(function(p){return p.peso_kg!==null||p.series!==null||p.repeticoes!==null||p.observacoes||p.dados_json.feito;});
     if(!dataRows.length){box.textContent='Preencha ou marque pelo menos um exercício antes de concluir.'; box.className='exercise-save-status warn visible'; return;}
     btn.disabled=true; btn.textContent='Enviando...'; box.textContent='Salvando treino...'; box.className='exercise-save-status visible';
+    var sentOk=false;
     try{
       if(cloudReady && supabaseClient){
         var res=await supabaseClient.from(TABLE).insert(dataRows).select();
         if(res.error) throw res.error;
         addToHistory(res.data && res.data.length ? res.data : dataRows);
-        clearCurrentInputsOnly(letter);
-        box.textContent='Treino enviado. Campos limpos; peso anterior mantido.';
-        box.className='exercise-save-status ok visible';
-      } else {
-        addToHistory(dataRows.map(function(r){return Object.assign({local:true},r);}));
-        clearCurrentInputsOnly(letter);
-        box.textContent='Treino salvo localmente. Campos limpos; peso anterior mantido.';
-        box.className='exercise-save-status warn visible';
+        sentOk=true;
       }
-      renderDashboard();
-    }catch(e){
-      addToHistory(dataRows.map(function(r){return Object.assign({local:true},r);}));
+    }catch(e){ sentOk=false; }
+    if(sentOk){
       clearCurrentInputsOnly(letter);
-      box.textContent='Treino salvo localmente. Campos limpos; peso anterior mantido. Verifique Supabase/RLS.';
+      box.textContent='Treino enviado. Campos limpos; peso anterior mantido.';
+      box.className='exercise-save-status ok visible';
+    }else{
+      // v23: sem confirmacao da nuvem, o treino vai para a fila e e reenviado sozinho.
+      var stamp=new Date().toISOString();
+      var queuedRows=dataRows.map(function(r){return Object.assign({created_at:stamp},r);});
+      var queued=!!(window.TRI_OUTBOX && window.TRI_OUTBOX.enqueue(TABLE,queuedRows,'Academia '+letter));
+      addToHistory(queuedRows.map(function(r){return Object.assign({local:true,queued:queued},r);}));
+      clearCurrentInputsOnly(letter);
+      box.textContent=queued ? 'A nuvem não respondeu. Treino guardado no celular e enviado sozinho quando a conexão voltar. Peso anterior mantido.' : 'Treino salvo apenas no celular. Peso anterior mantido.';
       box.className='exercise-save-status warn visible';
     }
+    renderDashboard();
     btn.disabled=false; btn.textContent='Concluir treino e enviar';
   }
 

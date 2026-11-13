@@ -12,6 +12,7 @@ let state = JSON.parse(localStorage.getItem(stateKey) || '{}');
 if(!state.done) state.done = {};
 if(!state.control) state.control = {};
 if(!state.gymDone) state.gymDone = {};
+if(!state.sessions) state.sessions = {};
 
 function save(){ localStorage.setItem(stateKey, JSON.stringify(state)); }
 function fmtDate(s){ const d = new Date(s+'T12:00:00'); return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); }
@@ -21,11 +22,17 @@ function setCloudStatus(message, type='neutral'){
   el.textContent = message;
   el.className = `cloud-status ${type}`;
 }
+function cloudLabel(){
+  const c = (window.NEON_CLOUD && window.NEON_CLOUD.current) ? window.NEON_CLOUD.current() : '';
+  if(c === 'neon') return 'Neon';
+  if(c === 'supabase') return 'Supabase (reserva, Neon não respondeu)';
+  return 'nuvem';
+}
 function initCloud(){
   if(window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY){
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     cloudReady = true;
-    setCloudStatus('Nuvem: Supabase conectado. Salvamento local + online.', 'ok');
+    setCloudStatus('Nuvem: verificando conexão...', 'neutral');
     loadCloudHistory();
   }else{
     setCloudStatus('Nuvem: indisponível. Salvando apenas neste celular.', 'warn');
@@ -214,6 +221,48 @@ function renderDashboard(){
     hist.innerHTML = entries.length ? entries.map(([week,rec])=>`<div class="history-item"><strong>Semana ${week}</strong><div class="muted">Joelho ${rec.kneePain||'-'} • RPE ${rec.rpe||'-'} • Sono ${rec.sleep||'-'}</div><p>${rec.notes||''}</p></div>`).join('') : '<p class="muted">Ainda não há registros. Preencha a aba Controle no fim da semana.</p>';
   }
 }
+function controlPayload(week, rec){
+  const w = data.plano25.find(x=>String(x['Sem'])===String(week)) || data.plano25[selectedWeek];
+  const tasks = weekTasks(w);
+  const doneCount = tasks.filter(t=>state.done[t.id]).length;
+  return {
+    device_id: CLOUD_DEVICE_ID,
+    semana: Number(week),
+    dor_joelho: rec.kneePain === '' || rec.kneePain == null ? null : Number(rec.kneePain),
+    rpe_medio: rec.rpe === '' || rec.rpe == null ? null : Number(rec.rpe),
+    sono_medio: rec.sleep || null,
+    observacoes: rec.notes || null,
+    treinos_concluidos: doneCount,
+    total_treinos: tasks.length,
+    dados_json: {
+      done: state.done,
+      gymDone: state.gymDone,
+      selectedWeek,
+      savedAt: rec.date || new Date().toISOString()
+    }
+  };
+}
+function controlInQueue(week){
+  if(!window.TRI_OUTBOX) return false;
+  return window.TRI_OUTBOX.pendingRows('registros_treino').some(r=>String(r.semana)===String(week));
+}
+function queueControl(week, rec){
+  if(!window.TRI_OUTBOX) return false;
+  const row = controlPayload(week, rec);
+  if(rec.date) row.created_at = rec.date;
+  window.TRI_OUTBOX.enqueue('registros_treino', row, 'Controle semana '+week);
+  rec.queued = true;
+  save();
+  return true;
+}
+// Semanas salvas so no celular por versoes antigas (a nuvem falhou e nada reenviava).
+function queueUnsentControls(){
+  Object.entries(state.control).forEach(([week, rec])=>{
+    if(!rec || rec.cloud || rec.queued) return;
+    if(rec.kneePain==='' && rec.rpe==='' && !rec.sleep && !rec.notes) return;
+    queueControl(week, rec);
+  });
+}
 async function loadCloudHistory(){
   if(!cloudReady || !supabaseClient) return;
   try{
@@ -226,6 +275,7 @@ async function loadCloudHistory(){
     if(error) throw error;
     if(rows && rows.length){
       rows.reverse().forEach(row=>{
+        if(controlInQueue(row.semana)) return; // o registro local ainda nao enviado e mais novo
         state.control[row.semana] = {
           kneePain: row.dor_joelho ?? '',
           rpe: row.rpe_medio ?? '',
@@ -240,44 +290,36 @@ async function loadCloudHistory(){
         }
       });
       save(); renderAll(); renderModalidades();
-      setCloudStatus(`Nuvem: ${rows.length} registro(s) carregado(s) do Supabase.`, 'ok');
+      setCloudStatus(`Nuvem: ${cloudLabel()} conectado. ${rows.length} registro(s) carregado(s).`, 'ok');
     }else{
-      setCloudStatus('Nuvem: conectado, sem registros antigos ainda.', 'ok');
+      setCloudStatus(`Nuvem: ${cloudLabel()} conectado, sem registros antigos ainda.`, 'ok');
     }
+    queueUnsentControls();
   }catch(err){
-    setCloudStatus('Nuvem: não foi possível carregar. Verifique se a tabela registros_treino existe e se as policies estão ativas.', 'warn');
+    setCloudStatus('Nuvem: sem resposta agora. O que você salvar fica guardado no celular e é enviado sozinho quando a conexão voltar.', 'warn');
   }
 }
+// Devolve 'ok' (nuvem confirmou), 'queued' (guardado na fila de envio) ou 'local' (so no celular).
 async function saveControlToCloud(week, rec){
-  if(!cloudReady || !supabaseClient){
-    setCloudStatus('Nuvem: indisponível. Registro salvo apenas no celular.', 'warn');
-    return false;
+  const payload = controlPayload(week, rec);
+  let failed = !cloudReady || !supabaseClient;
+  if(!failed){
+    try{
+      const { error } = await supabaseClient.from('registros_treino').insert(payload);
+      if(error) failed = true;
+    }catch(e){ failed = true; }
   }
-  const tasks = weekTasks(data.plano25[selectedWeek]);
-  const doneCount = tasks.filter(t=>state.done[t.id]).length;
-  const payload = {
-    device_id: CLOUD_DEVICE_ID,
-    semana: Number(week),
-    dor_joelho: rec.kneePain === '' ? null : Number(rec.kneePain),
-    rpe_medio: rec.rpe === '' ? null : Number(rec.rpe),
-    sono_medio: rec.sleep || null,
-    observacoes: rec.notes || null,
-    treinos_concluidos: doneCount,
-    total_treinos: tasks.length,
-    dados_json: {
-      done: state.done,
-      gymDone: state.gymDone,
-      selectedWeek,
-      savedAt: new Date().toISOString()
-    }
-  };
-  const { error } = await supabaseClient.from('registros_treino').insert(payload);
-  if(error){
-    setCloudStatus('Nuvem: erro ao salvar. Confirme a tabela e as policies no Supabase.', 'danger');
-    return false;
+  if(!failed){
+    rec.cloud = true; delete rec.queued; save();
+    setCloudStatus(`Nuvem: registro salvo com sucesso no ${cloudLabel()}.`, 'ok');
+    return 'ok';
   }
-  setCloudStatus('Nuvem: registro salvo com sucesso no Supabase.', 'ok');
-  return true;
+  if(queueControl(week, rec)){
+    setCloudStatus('Nuvem: sem resposta. Registro guardado na fila e enviado sozinho quando a conexão voltar.', 'warn');
+    return 'queued';
+  }
+  setCloudStatus('Nuvem: indisponível. Registro salvo apenas no celular.', 'warn');
+  return 'local';
 }
 function renderAll(){ initHeader(); renderChecklist(); renderWeekDetail(); renderTimeline(); renderControl(); renderDashboard(); }
 
@@ -294,8 +336,9 @@ document.getElementById('saveControl').addEventListener('click',async()=>{
   save();
   document.getElementById('controlMsg').textContent='Controle salvo no celular. Enviando para nuvem...';
   renderHistory(); renderDashboard();
-  const ok = await saveControlToCloud(w['Sem'], rec);
-  document.getElementById('controlMsg').textContent = ok ? 'Controle salvo no celular e no Supabase.' : 'Controle salvo no celular. A nuvem não confirmou o envio.';
+  const result = await saveControlToCloud(w['Sem'], rec);
+  document.getElementById('controlMsg').textContent = result === 'ok' ? 'Controle salvo no celular e na nuvem.'
+    : (result === 'queued' ? 'Controle salvo no celular. A nuvem não respondeu: o envio será refeito automaticamente.' : 'Controle salvo apenas no celular.');
   renderHistory(); renderDashboard();
 });
 let deferredPrompt; const installBtn=document.getElementById('installBtn');

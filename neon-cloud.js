@@ -1,7 +1,7 @@
-// v22 - Nuvem no Neon (Postgres) com Supabase como reserva.
+// v23 - Nuvem no Neon (Postgres) com Supabase como reserva.
 // Carregado depois do supabase-js e antes do app.js. Troca o cliente que o app recebe
 // em supabase.createClient() por um cliente compativel que grava e le no Neon.
-// Se o Neon nao responder ao abrir o app, a sessao inteira usa o Supabase antigo.
+// Se o Neon nao responder, usa o Supabase antigo e volta ao Neon assim que ele responder.
 (function(){
   var NEON_DATA_API_URL = 'https://ep-aged-recipe-bde6crpf.apirest.c-8.us-east-2.aws.neon.tech/neondb/rest/v1';
   var NEON_AUTH_URL = 'https://ep-aged-recipe-bde6crpf.neonauth.c-8.us-east-2.aws.neon.tech/neondb/auth';
@@ -57,24 +57,46 @@
   }
 
   function createCloudClient(sb){
-    var backend = (async function(){
-      try{
-        var t = await neonRun({table:PING_TABLE, select:'id', filters:[], order:null, limit:1, rows:null});
-        if(t.error) throw new Error(t.error.message);
-        return 'neon';
-      }catch(e){
-        try{ console.warn('Neon indisponivel, usando reserva:', e && e.message ? e.message : e); }catch(_){}
-        return sb ? 'supabase' : 'none';
-      }
-    })();
+    // v23: o banco em uso e reavaliado. Antes, abrir o app sem internet prendia a sessao
+    // inteira na reserva; agora o Neon e testado de novo (no maximo a cada 15 s) ate responder.
+    var current = 'unknown', lastPing = 0, pinging = null;
+
+    function ping(){
+      if(pinging) return pinging;
+      lastPing = Date.now();
+      pinging = (async function(){
+        try{
+          var t = await neonRun({table:PING_TABLE, select:'id', filters:[], order:null, limit:1, rows:null});
+          if(t.error) throw new Error(t.error.message);
+          current = 'neon';
+        }catch(e){
+          try{ console.warn('Neon indisponivel, usando reserva:', e && e.message ? e.message : e); }catch(_){}
+          current = sb ? 'supabase' : 'none';
+        }
+        pinging = null;
+        return current;
+      })();
+      return pinging;
+    }
+    function resolve(){
+      if(current === 'neon') return Promise.resolve('neon');
+      if(current !== 'unknown' && Date.now() - lastPing < 15000) return Promise.resolve(current);
+      return ping();
+    }
+    var backend = ping();
+    // Quando a internet volta, o proximo pedido testa o Neon de novo na hora.
+    try{ window.addEventListener('online', function(){ lastPing = 0; }); }catch(e){}
 
     async function run(q){
-      var which = await backend;
+      var which = await resolve();
       if(which === 'neon'){
         try{ return await neonRun(q); }
         catch(e){ return {data:null, error:{message:(e && e.message) ? e.message : String(e)}}; }
       }
-      if(which === 'supabase') return await supabaseRun(sb, q);
+      if(which === 'supabase'){
+        try{ return await supabaseRun(sb, q); }
+        catch(e){ return {data:null, error:{message:(e && e.message) ? e.message : String(e)}}; }
+      }
       return {data:null, error:{message:'Nuvem indisponível'}};
     }
 
@@ -90,26 +112,7 @@
       };
       return b;
     }
-    return {from:from, backend:backend};
-  }
-
-  // Ajusta os avisos da tela para mostrar o banco realmente em uso.
-  function watchLabels(backend){
-    backend.then(function(which){
-      var label = which === 'neon' ? 'Neon' : (which === 'supabase' ? 'Supabase (reserva, Neon não respondeu)' : null);
-      if(!label) return;
-      function fix(el){
-        if(!el) return;
-        var t = el.textContent || '';
-        if(t.indexOf('Supabase') >= 0 && t.indexOf(label) < 0) el.textContent = t.replace(/Supabase/g, label);
-      }
-      ['cloudStatus','controlMsg'].forEach(function(id){
-        var el = document.getElementById(id);
-        if(!el) return;
-        fix(el);
-        new MutationObserver(function(){ fix(el); }).observe(el, {childList:true, characterData:true, subtree:true});
-      });
-    });
+    return {from:from, backend:backend, current:function(){ return current; }};
   }
 
   var shared = null;
@@ -118,11 +121,14 @@
     var sb = null;
     try{ sb = realCreate ? realCreate(url, key, opts) : null; }catch(e){ sb = null; }
     shared = createCloudClient(sb);
-    watchLabels(shared.backend);
     return shared;
   }
 
   // Substitui o objeto global inteiro (as propriedades do supabase-js podem ser somente leitura).
   window.supabase = {createClient:createClient};
-  window.NEON_CLOUD = {dataApiUrl:NEON_DATA_API_URL, backend:function(){ return shared ? shared.backend : Promise.resolve('none'); }};
+  window.NEON_CLOUD = {
+    dataApiUrl:NEON_DATA_API_URL,
+    backend:function(){ return shared ? shared.backend : Promise.resolve('none'); },
+    current:function(){ return shared ? shared.current() : 'unknown'; }
+  };
 })();

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#101828" />
   <title>Triathlon Penha 2027</title>
-  <link rel="manifest" href="manifest.webmanifest?v=22" />
-  <link rel="stylesheet" href="styles.css?v=22" />
+  <link rel="manifest" href="manifest.webmanifest?v=23" />
+  <link rel="stylesheet" href="styles.css?v=23" />
 </head>
 <body>
   <header class="app-header">
@@ -14,12 +14,13 @@
       <p class="eyebrow">Projeto Triathlon</p>
       <h1>Penha 14/02/2027</h1>
       <p class="sub">Treinos em Blumenau, Penha e Navegantes</p>
-      <span class="version-badge">Versão v22 • Banco de dados Neon • 12/11/2026</span>
+      <span class="version-badge">Versão v23 • Registro de treinos + fila offline • 13/11/2026</span>
     </div>
     <button id="installBtn" class="ghost hidden">Instalar</button>
   </header>
 
   <main>
+    <div id="outboxStatus" class="outbox-status hidden" role="status"></div>
     <section class="hero card">
       <div>
         <span id="phaseBadge" class="badge">Plano ativo</span>
@@ -44,7 +45,7 @@
     <section id="view-hoje" class="view active">
       <div class="card warning">
         <h3>Última versão carregada</h3>
-        <p><strong>App v22</strong> • Banco de dados Neon • 12/11/2026</p>
+        <p><strong>App v23</strong> • Registro de treinos + fila offline • 13/11/2026</p>
         <p class="muted" style="margin-top:6px">Se aqui aparecer uma versão antiga, o celular ainda está usando cache anterior.</p>
       </div>
       <div class="card">
@@ -71,7 +72,7 @@
         <div class="section-head">
           <div>
             <h2>Dashboard de desenvolvimento</h2>
-            <p class="muted">Mostra sua evolução com base nos checklists e registros salvos no celular e na nuvem.</p>
+            <p class="muted">Mostra sua evolução com base nos treinos registrados, checklists e controles salvos no celular e na nuvem.</p>
           </div>
         </div>
       </div>
@@ -154,17 +155,19 @@
 
   <footer>
     <span>Plano iniciante • até 5 treinos/semana • domingo opcional</span>
-    <strong class="footer-version">App v22 • Banco Neon</strong>
+    <strong class="footer-version">App v23 • Banco Neon</strong>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="neon-cloud.js?v=22"></script>
-  <script src="data.js?v=22"></script>
-  <script src="exercise-overrides.js?v=22"></script>
-  <script src="app.js?v=22"></script>
-  <script src="schedule-overrides.js?v=22"></script>
-  <script src="ui-v19.js?v=22"></script>
-  <script src="cycles-v20.js?v=22"></script>
-  <script src="cargas-v21.js?v=22"></script>
+  <script src="neon-cloud.js?v=23"></script>
+  <script src="data.js?v=23"></script>
+  <script src="exercise-overrides.js?v=23"></script>
+  <script src="fila-v23.js?v=23"></script>
+  <script src="app.js?v=23"></script>
+  <script src="schedule-overrides.js?v=23"></script>
+  <script src="ui-v19.js?v=23"></script>
+  <script src="cycles-v20.js?v=23"></script>
+  <script src="cargas-v21.js?v=23"></script>
+  <script src="sessoes-v23.js?v=23"></script>
 </body>
 </html>
